@@ -9,12 +9,14 @@ import { registerAuth } from './auth/auth.js';
 import { registerRoutes } from './routes.js';
 import { TaskService } from './services/tasks/tasks.js';
 import { MemoryService } from './services/memory/memory.js';
+import { FinanceService } from './services/finance/finance.js';
+import { GoalService } from './services/goals/goals.js';
 import { Agent, anthropicCreate, type CreateMessage } from './services/ai/agent.js';
 
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 
 export async function buildApp(config: Config, db: Db, opts: { createMessage?: CreateMessage | null; logger?: boolean } = {}) {
-  const app = Fastify({ logger: opts.logger ?? false, trustProxy: true, bodyLimit: 1_000_000 });
+  const app = Fastify({ logger: opts.logger ?? false, trustProxy: true, bodyLimit: 5_000_000 });
 
   // Basic security headers.
   app.addHook('onSend', async (_req, reply) => {
@@ -30,8 +32,10 @@ export async function buildApp(config: Config, db: Db, opts: { createMessage?: C
   const create = opts.createMessage !== undefined ? opts.createMessage : (config.anthropicApiKey ? anthropicCreate(config.anthropicApiKey) : null);
   const tasks = new TaskService(db, config.timezone);
   const memory = new MemoryService(db);
+  const finance = new FinanceService(db, config.timezone);
+  const goals = new GoalService(db, finance, config.timezone);
   const agent = new Agent(db, create, { model: config.aiModel, effort: config.aiEffort, timezone: config.timezone });
-  registerRoutes(app, db, { tasks, memory, agent, model: config.aiModel });
+  registerRoutes(app, db, { tasks, memory, finance, goals, agent, model: config.aiModel });
 
   app.get('/health', async () => {
     await db.query('SELECT 1');

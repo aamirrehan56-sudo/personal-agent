@@ -6,12 +6,12 @@ const SECTIONS = [
   { id: 'home', label: 'Home', ico: '◎', tab: true },
   { id: 'chat', label: 'AI Chat', ico: '✦', tab: true },
   { id: 'tasks', label: 'Tasks', ico: '☑', tab: true },
-  { id: 'finance', label: 'Finance', ico: '$', phase: 2 },
-  { id: 'goals', label: 'Goals', ico: '★', phase: 2 },
+  { id: 'finance', label: 'Finance', ico: '$', tab: true },
+  { id: 'goals', label: 'Goals', ico: '★' },
   { id: 'social', label: 'Social Studio', ico: '▶', phase: 3 },
   { id: 'automations', label: 'Automations', ico: '⟳', phase: 4 },
-  { id: 'memory', label: 'Memory', ico: '◈', tab: true },
-  { id: 'settings', label: 'Settings', ico: '⚙', tab: true },
+  { id: 'memory', label: 'Memory', ico: '◈' },
+  { id: 'settings', label: 'Settings', ico: '⚙' },
 ];
 
 // ---------- helpers ----------
@@ -113,7 +113,9 @@ function renderNav(active) {
       <span class="ico">${s.ico}</span>${esc(s.label)}${s.phase ? `<span class="tag">Phase ${s.phase}</span>` : ''}
     </a>`).join('');
   $('#tabbar').innerHTML = SECTIONS.filter((s) => s.tab).map((s) => `
-    <a class="${s.id === active ? 'active' : ''}" href="#/${s.id}"><span class="ico">${s.ico}</span>${esc(s.label.replace('AI ', ''))}</a>`).join('');
+    <a class="${s.id === active ? 'active' : ''}" href="#/${s.id}"><span class="ico">${s.ico}</span>${esc(s.label.replace('AI ', ''))}</a>`).join('')
+    + `<a href="#" id="moreTab" class="${SECTIONS.find((s) => s.id === active && !s.tab) ? 'active' : ''}"><span class="ico">☰</span>More</a>`;
+  $('#moreTab').onclick = (e) => { e.preventDefault(); $('#shell').classList.add('menu-open'); };
 }
 $('#menu').onclick = () => $('#shell').classList.toggle('menu-open');
 $('#scrim').onclick = () => $('#shell').classList.remove('menu-open');
@@ -227,13 +229,19 @@ const VIEWS = {
           <div class="card"><h2>Overdue</h2><div class="stat" style="color:${o.overdue.length ? 'var(--bad)' : 'inherit'}">${o.overdue.length}</div><div class="stat-sub">${o.upcoming_7_days.length} due in the next 7 days</div></div>
           <div class="card"><h2>This week</h2><div class="stat">${h.week.completion_rate ?? '–'}${h.week.completion_rate !== null ? '%' : ''}</div><div class="stat-sub">${h.week.completed_on_time} of ${h.week.planned} planned tasks done on time</div></div>
         </div>
+        <div class="grid cols-3">
+          <a class="card link-card" href="#/finance"><h2>Safe to spend this week</h2><div class="stat">${aud(h.safe_to_spend.safe_to_spend_cents, { whole: true })}</div>
+            <div class="stat-sub">${h.safe_to_spend.shortfall_cents ? `<span style="color:var(--bad)">Over by ${aud(h.safe_to_spend.shortfall_cents)} this week</span>` : h.safe_to_spend.warnings.length ? esc(h.safe_to_spend.warnings[0]) : `About ${aud(h.safe_to_spend.per_day_cents, { whole: true })} a day until Sunday`}</div></a>
+          <a class="card link-card" href="#/finance/bills"><h2>Bills due in 7 days</h2>${h.upcoming_bills.length ? h.upcoming_bills.slice(0, 4).map((b) => `<div class="row small" style="padding:3px 0"><span>${esc(b.name)}</span><span class="spacer"></span><span class="muted">${relDay(b.next_due)}</span><b>${aud(b.amount_cents, { whole: true })}</b></div>`).join('') : '<div class="empty">No bills due this week.</div>'}</a>
+          <a class="card link-card" href="#/goals"><h2>Savings goals</h2>${h.goals.length ? h.goals.slice(0, 3).map((g) => `<div style="padding:3px 0"><div class="row small"><span>${esc(g.name)}</span><span class="spacer"></span>${goalPill(g.plan.status)}</div><div class="hbar-track"><i style="width:${g.plan.percent}%"></i></div></div>`).join('') : '<div class="empty">No goals yet.</div>'}</a>
+        </div>
         ${h.pending_approvals.length ? `<div class="card"><h2>Waiting for your approval</h2>${h.pending_approvals.map((p) => `<div class="row" style="padding:6px 0"><span>${esc(p.summary)}</span><span class="spacer"></span><a class="btn small ghost" href="#/chat/${p.conversation_id ?? ''}">Review</a></div>`).join('')}</div>` : ''}
         <div class="grid cols-2">
           <div class="card" id="homeToday"><h2>Today</h2>${taskList([...o.overdue, ...o.due_today], 'Nothing due today. Enjoy it, or add a task.')}</div>
           <div class="card"><h2>Completed this week</h2>${bars(h.week.completed_by_day)}
             <p class="small muted" style="margin:10px 0 0">Habits: ${h.week.habits.done} done of ${h.week.habits.planned} planned.</p></div>
         </div>
-        <div class="card"><h2>Coming next</h2><p class="muted small" style="margin:0">Finance, savings goals and bills arrive in Phase 2, Social Studio in Phase 3, and the automatic 7 am / 1 pm / 8 pm briefings in Phase 4. Those sections are marked in the menu and are not active yet.</p></div>
+        <div class="card"><h2>Coming next</h2><p class="muted small" style="margin:0">Social Studio arrives in Phase 3 and the automatic 7 am / 1 pm / 8 pm briefings in Phase 4. Those sections are marked in the menu and are not active yet.</p></div>
       </div>`;
     bindTaskActions($('#homeToday'), () => route());
     view.querySelectorAll('[data-prompt]').forEach((a) => a.addEventListener('click', () => { state.pendingPrompt = a.dataset.prompt; state.convId = null; }));
@@ -306,7 +314,7 @@ const VIEWS = {
         <div class="chat-main">
           <div class="messages" id="msgs"></div>
           <div class="suggestions" id="sugg">
-            ${['Plan my day tomorrow', 'Remind me to pay electricity next Friday', 'What important tasks have I missed?', 'Organise my tasks by priority', 'How did I go this week?']
+            ${['How much can I safely spend this week?', 'Plan my day tomorrow', 'Remind me to pay electricity next Friday', 'Am I on track with my savings goals?', 'Where can I cut back on spending?', 'What important tasks have I missed?']
               .map((s) => `<button>${s}</button>`).join('')}
           </div>
           <form class="composer" id="composer">
@@ -352,7 +360,7 @@ const VIEWS = {
       c.messages.forEach((m) => bubble(m.role, m.text, m.tools));
       c.pending.slice().reverse().forEach(approvalCard);
     } else {
-      bubble('assistant', `Hi ${state.me.display_name}! I can plan your day, add reminders, reschedule and prioritise tasks, review your week and remember your preferences. What would you like to do?`);
+      bubble('assistant', `Hi ${state.me.display_name}! I can plan your day, manage tasks and reminders, record spending, track bills, budgets and savings goals, tell you what's safe to spend, and remember your preferences. What would you like to do?`);
     }
     if (state.pendingPrompt && state.me.ai_configured) { const p = state.pendingPrompt; state.pendingPrompt = null; send(p); }
 
@@ -476,6 +484,400 @@ const VIEWS = {
     };
     $('#revoke').onclick = async () => { await api('/api/auth/sessions/revoke-others', { method: 'POST' }); route(); };
   },
+};
+
+// ---------- money helpers ----------
+function aud(cents, opts = {}) {
+  if (cents === null || cents === undefined) return '–';
+  return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: opts.whole ? 0 : 2, minimumFractionDigits: opts.whole ? 0 : 2 }).format(cents / 100);
+}
+function toCents(v) {
+  const n = Number(String(v).replace(/[$,\s]/g, ''));
+  return Number.isFinite(n) ? Math.round(n * 100) : NaN;
+}
+function addDaysIso(iso, n) { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function hbars(items, { value, label, max, marker, color } = {}) {
+  const top = max ?? Math.max(1, ...items.map(value));
+  return `<div class="hbars">${items.map((it) => {
+    const v = value(it); const pct = Math.min(100, (v / top) * 100);
+    const m = marker ? marker(it) : null;
+    return `<div class="hbar"><div class="hbar-top"><span>${label(it)}</span></div>
+      <div class="hbar-track"><i style="width:${pct}%;${color ? `background:${color(it)}` : ''}"></i>${m !== null && m !== undefined ? `<b class="hbar-mark" style="left:${Math.min(100, (m / top) * 100)}%"></b>` : ''}</div></div>`;
+  }).join('')}</div>`;
+}
+function columnChart(points, { value, label, height = 120 } = {}) {
+  const max = Math.max(1, ...points.map(value));
+  const w = 100 / Math.max(points.length, 1);
+  return `<svg class="colchart" viewBox="0 0 100 ${height / 3}" preserveAspectRatio="none" role="img" aria-label="Daily spending">
+    ${points.map((p, i) => { const h = (value(p) / max) * (height / 3 - 1); return `<rect x="${i * w + w * 0.15}" y="${height / 3 - h}" width="${w * 0.7}" height="${Math.max(h, value(p) ? 0.6 : 0.2)}" rx="0.6"><title>${esc(label(p))}</title></rect>`; }).join('')}
+  </svg>`;
+}
+function lineChart(series, { from, to, target }) {
+  // Cumulative saved amount over time, with the straight "on-track" line from start to target date.
+  // Labels are HTML (not SVG text) so they stay readable at any screen width.
+  const W = 600, H = 160, P = 6;
+  const end = to ?? addDaysIso(todayIso(), 30);
+  const t0 = Date.parse(from), t1 = Date.parse(end);
+  const X = (d) => P + ((Date.parse(d) - t0) / Math.max(1, t1 - t0)) * (W - P * 2);
+  const max = Math.max(target, ...series.map((s) => s.saved_cents)) || 1;
+  const Y = (c) => H - P - (c / max) * (H - P * 2);
+  const pts = series.length ? [{ date: from, saved_cents: series[0].date === from ? series[0].saved_cents : 0 }, ...series] : [];
+  const today = todayIso();
+  if (pts.length && today > pts.at(-1).date && today <= end) pts.push({ date: today, saved_cents: pts.at(-1).saved_cents });
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.date).toFixed(1)} ${Y(p.saved_cents).toFixed(1)}`).join(' ');
+  const start = pts[0]?.saved_cents ?? 0;
+  return `<svg class="linechart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Goal progress chart">
+    <line x1="${P}" x2="${W - P}" y1="${Y(target)}" y2="${Y(target)}" class="lc-target" vector-effect="non-scaling-stroke"/>
+    ${to ? `<line x1="${X(from)}" y1="${Y(start)}" x2="${X(to)}" y2="${Y(target)}" class="lc-ideal" vector-effect="non-scaling-stroke"/>` : ''}
+    <path d="${path}" class="lc-actual" vector-effect="non-scaling-stroke"/>
+  </svg>
+  <div class="row small muted" style="justify-content:space-between"><span>${auDate(from)}</span><span>${to ? auDate(to) : ''}</span></div>
+  <div class="small muted row" style="gap:16px"><span><i class="key key-actual"></i>Saved</span>${to ? '<span><i class="key key-ideal"></i>On-track line</span>' : ''}<span><i class="key key-target"></i>Target ${aud(target, { whole: true })}</span></div>`;
+}
+const GOAL_STATUS = { on_track: ['On track', 'good'], ahead: ['Ahead', 'good'], behind: ['Behind', 'bad'], achieved: ['Achieved', 'good'], no_deadline: ['No deadline', ''], overdue: ['Past target date', 'bad'] };
+function goalPill(status) { const [l, c] = GOAL_STATUS[status] ?? [status, '']; return `<span class="pill ${c}">${l}</span>`; }
+function freqLabel(f) { return { weekly: 'weekly', fortnightly: 'fortnightly', monthly: 'monthly', quarterly: 'quarterly', yearly: 'yearly', once: 'once' }[f] ?? f; }
+
+VIEWS.finance = async (view, arg) => {
+  const tabs = { overview: 'Overview', transactions: 'Transactions', import: 'Import CSV', budgets: 'Budgets', bills: 'Bills', debts: 'Debts', reports: 'Reports' };
+  const tab = tabs[arg] ? arg : 'overview';
+  const meta = state.financeMeta ?? (state.financeMeta = await api('/api/finance/meta'));
+  const catOptions = (sel) => meta.categories.map((c) => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  view.innerHTML = `<div class="tabs" id="finTabs">${Object.entries(tabs).map(([k, v]) => `<button data-href="#/finance/${k}" class="${k === tab ? 'on' : ''}">${v}</button>`).join('')}</div><div id="fin"></div>`;
+  $('#finTabs').onclick = (e) => { const b = e.target.closest('[data-href]'); if (b) location.hash = b.dataset.href; };
+  const el = $('#fin');
+  const reload = () => VIEWS.finance(view, tab);
+
+  if (tab === 'overview') {
+    const o = await api('/api/finance/overview');
+    const s = o.safe_to_spend; const m = o.month;
+    const inc = o.income_setting;
+    el.innerHTML = `
+      <div class="grid">
+        <div class="grid cols-2">
+          <div class="card hero">
+            <h2>Safe to spend this week</h2>
+            <div class="stat">${aud(s.safe_to_spend_cents, { whole: true })}</div>
+            <div class="stat-sub">${s.shortfall_cents ? `<span style="color:var(--bad)">Over by ${aud(s.shortfall_cents)}</span>` : `About ${aud(s.per_day_cents, { whole: true })} a day for the ${s.days_left_in_week} day${s.days_left_in_week === 1 ? '' : 's'} left (to ${auDate(s.week_end)})`}</div>
+            <table class="small" style="margin-top:12px"><tbody>
+              <tr><td>Weekly income <span class="muted">(${esc(s.income_source)})</span></td><td style="text-align:right">${aud(s.weekly_income_cents)}</td></tr>
+              <tr><td>Bills set aside</td><td style="text-align:right">−${aud(s.bills_weekly_cents)}</td></tr>
+              <tr><td>Debt repayments</td><td style="text-align:right">−${aud(s.debt_repayments_weekly_cents)}</td></tr>
+              <tr><td>Savings goals</td><td style="text-align:right">−${aud(s.goal_targets_weekly_cents)}</td></tr>
+              <tr><td>Already spent this week</td><td style="text-align:right">−${aud(s.flexible_spent_this_week_cents)}</td></tr>
+            </tbody></table>
+            ${s.warnings.map((w) => `<p class="small" style="color:var(--warn);margin:8px 0 0">${esc(w)}</p>`).join('')}
+          </div>
+          <div class="card">
+            <h2>Your take-home pay</h2>
+            <p class="small muted" style="margin-top:0">Used until you have 4+ weeks of transactions. After that, real income is used.</p>
+            <form id="incomeForm" class="row">
+              <input name="amount" inputmode="decimal" placeholder="e.g. 2,400" value="${inc?.income_cents != null ? (inc.income_cents / 100).toFixed(2) : ''}" style="width:130px" required>
+              <select name="freq">${['weekly', 'fortnightly', 'monthly'].map((f) => `<option ${inc?.income_frequency === f ? 'selected' : ''}>${f}</option>`).join('')}</select>
+              <button class="btn">Save</button>
+            </form>
+            <h2 style="margin-top:18px">Savings capacity</h2>
+            <div class="stat" style="font-size:24px">${o.savings_capacity.monthly_cents === null ? '–' : `${aud(o.savings_capacity.monthly_cents, { whole: true })}<span class="stat-sub"> / month</span>`}</div>
+            <div class="small muted">${esc(o.savings_capacity.basis)}</div>
+          </div>
+        </div>
+        <div class="grid cols-3">
+          <div class="card"><h2>Income · ${auDate(m.from, { month: 'long' })}</h2><div class="stat" style="color:var(--good)">${aud(m.income_cents, { whole: true })}</div><div class="stat-sub">Last month ${aud(m.previous.income_cents, { whole: true })}</div></div>
+          <div class="card"><h2>Spending</h2><div class="stat">${aud(m.expenses_cents, { whole: true })}</div><div class="stat-sub">Last month ${aud(m.previous.expenses_cents, { whole: true })}</div></div>
+          <div class="card"><h2>Net</h2><div class="stat" style="color:${m.net_cents < 0 ? 'var(--bad)' : 'inherit'}">${aud(m.net_cents, { whole: true })}</div><div class="stat-sub">${m.savings_rate !== null ? `Savings rate ${m.savings_rate}%` : 'No income recorded this month'}</div></div>
+        </div>
+        <div class="grid cols-2">
+          <div class="card"><h2>Spending by category this month</h2>${m.by_category.length ? hbars(m.by_category.slice(0, 10), { value: (c) => c.spent_cents, label: (c) => `${esc(c.category)} <b>${aud(c.spent_cents, { whole: true })}</b>` }) : '<div class="empty">No spending recorded this month. Add a transaction or import a CSV.</div>'}</div>
+          <div class="card"><h2>Daily spending this month</h2>${columnChart(m.daily_spending, { value: (d) => d.spent_cents, label: (d) => `${auDate(d.date)}: ${aud(d.spent_cents)}` })}
+            <div class="row small muted" style="justify-content:space-between"><span>${auDate(m.from)}</span><span>${auDate(m.to)}</span></div></div>
+        </div>
+        <div class="grid cols-2">
+          <div class="card"><h2>Bills due in the next 14 days</h2>${o.upcoming_bills.length ? o.upcoming_bills.map((b) => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span>${esc(b.name)}</span>${b.overdue ? '<span class="pill overdue">overdue</span>' : b.reminder_due ? '<span class="pill high">due soon</span>' : ''}<span class="spacer"></span><span class="muted small">${relDay(b.next_due)}</span><b>${aud(b.amount_cents)}</b></div>`).join('') : '<div class="empty">Nothing due. Add bills in the Bills tab.</div>'}</div>
+          <div class="card"><h2>Budgets</h2>${o.budgets.length ? o.budgets.map((b) => `<div style="padding:4px 0"><div class="hbar-top"><span>${esc(b.category)} <span class="muted">(${b.period})</span></span><span><b>${aud(b.spent_cents, { whole: true })}</b> of ${aud(b.amount_cents, { whole: true })}</span></div>
+            <div class="hbar-track"><i style="width:${Math.min(100, b.percent_used)}%;background:${b.over_budget ? 'var(--bad)' : b.percent_used > 80 ? 'var(--warn)' : 'var(--accent)'}"></i></div></div>`).join('') : '<div class="empty">No budgets yet. Set them in the Budgets tab, or ask the AI.</div>'}</div>
+        </div>
+      </div>`;
+    $('#incomeForm').onsubmit = async (e) => {
+      e.preventDefault(); const f = Object.fromEntries(new FormData(e.target));
+      const c = toCents(f.amount); if (!(c >= 0)) return toast('Enter an amount like 2400 or 2,400.50');
+      try { await api('/api/finance/income', { method: 'PUT', body: { income_cents: c, income_frequency: f.freq } }); toast('Saved.'); reload(); } catch (err) { toast(err.message); }
+    };
+  }
+
+  if (tab === 'transactions') {
+    const month = state.finMonth ?? todayIso().slice(0, 7);
+    const from = `${month}-01`; const to = addDaysIso(`${new Date(Date.UTC(+month.slice(0, 4), +month.slice(5, 7), 1)).toISOString().slice(0, 10)}`, -1);
+    const rows = await api(`/api/finance/transactions?from=${from}&to=${to}`);
+    el.innerHTML = `
+      <div class="card" style="margin-bottom:16px">
+        <form id="txForm" class="form-grid">
+          <label class="wide">Description<input name="description" placeholder="e.g. Coles groceries" required maxlength="300"></label>
+          <label>Amount ($)<input name="amount" inputmode="decimal" placeholder="45.50" required></label>
+          <label>Type<select name="type"><option value="out">Money out</option><option value="in">Money in</option></select></label>
+          <label>Date<input name="date" type="date" value="${todayIso()}" required></label>
+          <label>Category<select name="category"><option value="">Automatic</option>${catOptions()}</select></label>
+          <button class="btn">Add</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="row" style="margin-bottom:8px"><input type="month" id="finMonth" value="${month}"><span class="spacer"></span>
+          <span class="small muted">${rows.length} transactions · in ${aud(rows.filter((r) => r.kind === 'income').reduce((s, r) => s + r.amount_cents, 0))} · out ${aud(-rows.filter((r) => r.kind === 'expense').reduce((s, r) => s + r.amount_cents, 0))}</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody id="txBody">
+        ${rows.map((t) => `<tr data-id="${t.id}"><td class="small" style="white-space:nowrap">${auDate(t.date)}</td><td>${esc(t.description)}${t.source !== 'manual' ? ` <span class="small muted">· ${esc(t.source)}</span>` : ''}</td>
+          <td><select data-cat style="max-width:170px">${catOptions(t.category)}</select></td>
+          <td style="text-align:right;white-space:nowrap;color:${t.amount_cents > 0 ? 'var(--good)' : 'inherit'}">${t.amount_cents > 0 ? '+' : ''}${aud(t.amount_cents)}</td>
+          <td><button class="btn small danger" data-del>✕</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">No transactions this month.</td></tr>'}
+        </tbody></table></div>
+      </div>`;
+    $('#finMonth').onchange = (e) => { state.finMonth = e.target.value; reload(); };
+    $('#txForm').onsubmit = async (e) => {
+      e.preventDefault(); const f = Object.fromEntries(new FormData(e.target));
+      const c = toCents(f.amount); if (!(c > 0)) return toast('Enter a positive amount, e.g. 45.50');
+      try {
+        const t = await api('/api/finance/transactions', { method: 'POST', body: { description: f.description, amount_cents: f.type === 'in' ? c : -c, date: f.date, ...(f.category ? { category: f.category } : {}) } });
+        toast(`Added as ${t.category}.`); reload();
+      } catch (err) { toast(err.message); }
+    };
+    $('#txBody').onchange = async (e) => {
+      if (!e.target.matches('[data-cat]')) return;
+      const id = e.target.closest('tr').dataset.id;
+      const remember = confirm('Always use this category for similar transactions? (OK = yes, Cancel = just this one)');
+      try { await api(`/api/finance/transactions/${id}`, { method: 'PATCH', body: { category: e.target.value, remember } }); toast(remember ? 'Updated, and remembered for next time.' : 'Updated.'); } catch (err) { toast(err.message); }
+    };
+    $('#txBody').onclick = async (e) => {
+      if (!e.target.matches('[data-del]')) return;
+      if (!confirm('Delete this transaction?')) return;
+      await api(`/api/finance/transactions/${e.target.closest('tr').dataset.id}`, { method: 'DELETE' }); reload();
+    };
+  }
+
+  if (tab === 'import') {
+    el.innerHTML = `<div class="card">
+      <h2>Import a CSV from your bank</h2>
+      <p class="small muted" style="margin-top:0">In your bank's app or website, export transactions as CSV (CommBank, NAB, ANZ, Westpac, ING and others all offer this). Your bank login is never needed. Importing the same file twice won't create duplicates.</p>
+      <input type="file" id="csvFile" accept=".csv,text/csv">
+      <div id="csvPreview"></div></div>`;
+    $('#csvFile').onchange = async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      if (file.size > 2_000_000) return toast('That file is over 2 MB. Export a shorter date range.');
+      const csv = await file.text();
+      try {
+        const p = await api('/api/finance/import/preview', { method: 'POST', body: { csv } });
+        const g = p.guess;
+        const colSel = (name, sel, optional) => `<label>${name}<select name="${name.toLowerCase()}">${optional ? '<option value="">(none)</option>' : ''}${p.header.map((h, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select></label>`;
+        $('#csvPreview').innerHTML = `
+          <p>${p.total_rows} rows found. Check the columns, then import.</p>
+          <form id="mapForm" class="form-grid">
+            ${colSel('Date', g.date)}${colSel('Description', g.description)}${colSel('Amount', g.amount, true)}${colSel('Debit', g.debit, true)}${colSel('Credit', g.credit, true)}
+            <label style="flex-direction:row;display:flex;gap:8px;align-items:center"><input type="checkbox" name="hasHeader" ${g.hasHeader ? 'checked' : ''}> First row is a header</label>
+            <label style="flex-direction:row;display:flex;gap:8px;align-items:center"><input type="checkbox" name="invert"> Spending shows as positive</label>
+            <button class="btn">Import ${p.total_rows} rows</button>
+          </form>
+          <div class="table-wrap" style="margin-top:12px"><table><thead><tr>${p.header.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>
+          ${p.sample.map((r) => `<tr>${r.map((c) => `<td class="small">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        $('#mapForm').onsubmit = async (ev) => {
+          ev.preventDefault(); const f = new FormData(ev.target);
+          const num = (k) => (f.get(k) === '' || f.get(k) === null ? undefined : Number(f.get(k)));
+          const mapping = { hasHeader: f.get('hasHeader') === 'on', invert: f.get('invert') === 'on', date: num('date'), description: num('description'), amount: num('amount'), debit: num('debit'), credit: num('credit') };
+          if (mapping.amount !== undefined) { delete mapping.debit; delete mapping.credit; }
+          try {
+            const r = await api('/api/finance/import', { method: 'POST', body: { csv, mapping } });
+            $('#csvPreview').innerHTML = `<p><b>${r.imported}</b> imported, ${r.duplicates} already there, ${r.errors.length} skipped.</p>
+              ${r.errors.slice(0, 10).map((x) => `<div class="small muted">Row ${x.row}: ${esc(x.error)}</div>`).join('')}
+              <a class="btn" href="#/finance/transactions" style="margin-top:10px">See transactions</a>`;
+          } catch (err) { toast(err.message); }
+        };
+      } catch (err) { toast(err.message); }
+    };
+  }
+
+  if (tab === 'budgets') {
+    const budgets = await api('/api/finance/budgets');
+    el.innerHTML = `<div class="card" style="margin-bottom:16px">
+      <form id="budForm" class="form-grid">
+        <label>Category<select name="category">${catOptions('Eating out')}</select></label>
+        <label>Period<select name="period"><option>weekly</option><option>monthly</option></select></label>
+        <label>Amount ($)<input name="amount" inputmode="decimal" placeholder="100" required></label>
+        <button class="btn">Save budget</button>
+      </form></div>
+      <div class="card">${budgets.length ? budgets.map((b) => `
+        <div class="budget" data-id="${b.id}">
+          <div class="row"><b>${esc(b.category)}</b><span class="muted small">${b.period}</span>${b.over_budget ? '<span class="pill overdue">over</span>' : ''}<span class="spacer"></span>
+            <span class="small">${aud(b.spent_cents)} of ${aud(b.amount_cents)}</span><button class="btn small danger" data-del>✕</button></div>
+          <div class="hbar-track"><i style="width:${Math.min(100, b.percent_used)}%;background:${b.over_budget ? 'var(--bad)' : b.percent_used > 80 ? 'var(--warn)' : 'var(--accent)'}"></i></div>
+          <div class="small muted">${b.remaining_cents >= 0 ? `${aud(b.remaining_cents)} left` : `${aud(-b.remaining_cents)} over`} · ${auDate(b.from)} to ${auDate(b.to)}</div>
+        </div>`).join('') : '<div class="empty">No budgets yet.</div>'}</div>`;
+    $('#budForm').onsubmit = async (e) => {
+      e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); const c = toCents(f.amount);
+      if (!(c > 0)) return toast('Enter an amount');
+      try { await api('/api/finance/budgets', { method: 'PUT', body: { category: f.category, period: f.period, amount_cents: c } }); reload(); } catch (err) { toast(err.message); }
+    };
+    el.onclick = async (e) => { if (e.target.matches('[data-del]')) { await api(`/api/finance/budgets/${e.target.closest('.budget').dataset.id}`, { method: 'DELETE' }); reload(); } };
+  }
+
+  if (tab === 'bills') {
+    const bills = await api('/api/finance/bills');
+    const active = bills.filter((b) => b.active);
+    el.innerHTML = `<div class="card" style="margin-bottom:16px">
+      <p class="small muted" style="margin-top:0">Track bills and subscriptions to get reminders and set money aside. The app never pays anything: "Paid" just records that you paid.</p>
+      <form id="billForm" class="form-grid">
+        <label class="wide">Name<input name="name" placeholder="e.g. Electricity (AGL)" required></label>
+        <label>Amount ($)<input name="amount" inputmode="decimal" required></label>
+        <label>How often<select name="frequency">${['monthly', 'weekly', 'fortnightly', 'quarterly', 'yearly', 'once'].map((f) => `<option>${f}</option>`).join('')}</select></label>
+        <label>Next due<input name="next_due" type="date" value="${todayIso()}" required></label>
+        <label>Remind (days before)<input name="remind" type="number" min="0" max="30" value="3"></label>
+        <label>Category<select name="category">${catOptions('Bills & Utilities')}</select></label>
+        <label style="flex-direction:row;display:flex;gap:8px;align-items:center"><input type="checkbox" name="sub"> Subscription</label>
+        <button class="btn">Add bill</button>
+      </form></div>
+      <div class="card"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">Active bills (${active.length})</h2><span class="spacer"></span>
+        <span class="small muted">Costs you ${aud(active.reduce((s, b) => s + b.monthly_equivalent_cents, 0))} a month · subscriptions ${aud(active.filter((b) => b.is_subscription).reduce((s, b) => s + b.monthly_equivalent_cents, 0))}/month</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Bill</th><th>Amount</th><th>Due</th><th></th></tr></thead><tbody>
+      ${bills.map((b) => `<tr data-id="${b.id}" style="${b.active ? '' : 'opacity:.5'}"><td>${esc(b.name)}${b.is_subscription ? ' <span class="pill">subscription</span>' : ''}<div class="small muted">${esc(b.category)} · ${freqLabel(b.frequency)}</div></td>
+        <td style="white-space:nowrap">${aud(b.amount_cents)}<div class="small muted">${aud(b.monthly_equivalent_cents)}/mo</div></td>
+        <td style="white-space:nowrap">${b.active ? `${relDay(b.next_due)} ${b.overdue ? '<span class="pill overdue">overdue</span>' : b.reminder_due ? '<span class="pill high">soon</span>' : ''}` : 'Done'}${b.last_paid ? `<div class="small muted">Paid ${auDate(b.last_paid)}</div>` : ''}</td>
+        <td style="white-space:nowrap">${b.active ? '<button class="btn small" data-paid>Paid</button>' : ''} <button class="btn small danger" data-del>✕</button></td></tr>`).join('') || '<tr><td colspan="4" class="empty">No bills yet.</td></tr>'}
+      </tbody></table></div></div>`;
+    $('#billForm').onsubmit = async (e) => {
+      e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); const c = toCents(f.amount);
+      if (!(c > 0)) return toast('Enter an amount');
+      try { await api('/api/finance/bills', { method: 'POST', body: { name: f.name, amount_cents: c, frequency: f.frequency, next_due: f.next_due, category: f.category, is_subscription: f.sub === 'on', remind_days_before: Number(f.remind || 3) } }); toast('Bill added.'); reload(); } catch (err) { toast(err.message); }
+    };
+    el.onclick = async (e) => {
+      const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+      try {
+        if (e.target.matches('[data-paid]')) {
+          const record = confirm('Also add this payment to your transactions? (OK = yes, Cancel = no, e.g. if it will come in with a CSV import)');
+          const r = await api(`/api/finance/bills/${tr.dataset.id}/paid`, { method: 'POST', body: { record_transaction: record } });
+          toast(r.bill.active ? `Recorded. Next due ${auDate(r.bill.next_due)}.` : 'Recorded.'); reload();
+        }
+        if (e.target.matches('[data-del]') && confirm('Delete this bill?')) { await api(`/api/finance/bills/${tr.dataset.id}`, { method: 'DELETE' }); reload(); }
+      } catch (err) { toast(err.message); }
+    };
+  }
+
+  if (tab === 'debts') {
+    const debts = await api('/api/finance/debts');
+    el.innerHTML = `<div class="card" style="margin-bottom:16px"><form id="debtForm" class="form-grid">
+        <label class="wide">Name<input name="name" placeholder="e.g. Credit card" required></label>
+        <label>Balance ($)<input name="balance" inputmode="decimal" required></label>
+        <label>Interest (% a year)<input name="rate" inputmode="decimal" value="0" required></label>
+        <label>Repayment ($)<input name="payment" inputmode="decimal" required></label>
+        <label>How often<select name="freq"><option>monthly</option><option>fortnightly</option><option>weekly</option></select></label>
+        <button class="btn">Add debt</button></form></div>
+      <div class="card"><div class="table-wrap"><table><thead><tr><th>Debt</th><th>Balance</th><th>Repayment</th><th>Paid off in</th><th></th></tr></thead><tbody>
+      ${debts.map((d) => `<tr data-id="${d.id}"><td>${esc(d.name)}<div class="small muted">${d.interest_rate}% a year</div></td><td>${aud(d.balance_cents)}</td>
+        <td>${aud(d.min_payment_cents)} ${d.payment_frequency}</td>
+        <td>${d.payoff_months === null ? `<span style="color:var(--bad)">${d.balance_cents ? 'Never at this rate' : '–'}</span>` : `${d.payoff_months} months<div class="small muted">${aud(d.total_interest_cents, { whole: true })} interest</div>`}</td>
+        <td style="white-space:nowrap"><button class="btn small ghost" data-bal>Update balance</button> <button class="btn small danger" data-del>✕</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">No debts recorded.</td></tr>'}
+      </tbody></table></div><p class="small muted">Payoff times are estimates at the repayment you entered, with interest charged monthly.</p></div>`;
+    $('#debtForm').onsubmit = async (e) => {
+      e.preventDefault(); const f = Object.fromEntries(new FormData(e.target));
+      try { await api('/api/finance/debts', { method: 'POST', body: { name: f.name, balance_cents: toCents(f.balance), interest_rate: Number(f.rate), min_payment_cents: toCents(f.payment), payment_frequency: f.freq } }); reload(); } catch (err) { toast(err.message); }
+    };
+    el.onclick = async (e) => {
+      const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+      if (e.target.matches('[data-del]') && confirm('Delete this debt?')) { await api(`/api/finance/debts/${tr.dataset.id}`, { method: 'DELETE' }); reload(); }
+      if (e.target.matches('[data-bal]')) { const v = prompt('New balance ($)'); if (v !== null) { await api(`/api/finance/debts/${tr.dataset.id}`, { method: 'PATCH', body: { balance_cents: toCents(v) } }); reload(); } }
+    };
+  }
+
+  if (tab === 'reports') {
+    const period = state.reportPeriod ?? 'week';
+    const [r, ins] = await Promise.all([api(`/api/finance/report?period=${period}`), api('/api/finance/insights')]);
+    const diff = (a, b) => { const d = a - b; return d === 0 ? '' : `<span class="small" style="color:${d > 0 ? 'var(--bad)' : 'var(--good)'}">${d > 0 ? '▲' : '▼'} ${aud(Math.abs(d), { whole: true })}</span>`; };
+    el.innerHTML = `<div class="tabs"><button data-p="week" class="${period === 'week' ? 'on' : ''}">This week</button><button data-p="month" class="${period === 'month' ? 'on' : ''}">This month</button></div>
+      <div class="grid">
+        <div class="card"><h2>${auDate(r.from)} – ${auDate(r.to)}</h2>
+          <div class="grid cols-3"><div><div class="stat" style="color:var(--good)">${aud(r.income_cents, { whole: true })}</div><div class="stat-sub">income (prev ${aud(r.previous.income_cents, { whole: true })})</div></div>
+          <div><div class="stat">${aud(r.expenses_cents, { whole: true })}</div><div class="stat-sub">spent ${diff(r.expenses_cents, r.previous.expenses_cents)} vs previous</div></div>
+          <div><div class="stat">${aud(r.net_cents, { whole: true })}</div><div class="stat-sub">${r.savings_rate !== null ? `saved ${r.savings_rate}% of income` : 'net'}</div></div></div>
+          <div style="margin-top:14px">${columnChart(r.daily_spending, { value: (d) => d.spent_cents, label: (d) => `${auDate(d.date)}: ${aud(d.spent_cents)}` })}</div></div>
+        <div class="card"><h2>By category</h2><div class="table-wrap"><table><thead><tr><th>Category</th><th style="text-align:right">Spent</th><th style="text-align:right">Previous</th></tr></thead><tbody>
+          ${r.by_category.map((c) => `<tr><td>${esc(c.category)}</td><td style="text-align:right">${aud(c.spent_cents)}</td><td style="text-align:right" class="muted">${aud(c.previous_cents)} ${diff(c.spent_cents, c.previous_cents)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">No spending in this period.</td></tr>'}
+        </tbody></table></div></div>
+        <div class="card"><h2>Worth a look (last 30 days)</h2>
+          <p>Flexible spending: <b>${aud(ins.discretionary_last_30_days_cents)}</b>${ins.discretionary_by_category.length ? ` (${ins.discretionary_by_category.map((c) => `${esc(c.category)} ${aud(c.spent_cents, { whole: true })}`).join(', ')})` : ''}.</p>
+          ${ins.top_discretionary_merchants.length ? `<p class="small muted" style="margin-bottom:4px">Top places</p>${ins.top_discretionary_merchants.map((m) => `<div class="small">${esc(m.name)}: ${aud(m.spent_cents)} over ${m.purchases} purchase${m.purchases === 1 ? '' : 's'}</div>`).join('')}` : ''}
+          ${ins.categories_up_vs_previous_30_days.length ? `<p class="small muted" style="margin-bottom:4px">Up on the previous 30 days</p>${ins.categories_up_vs_previous_30_days.map((c) => `<div class="small">${esc(c.category)}: ${aud(c.last_30_days_cents)} (up ${aud(c.increase_cents)})</div>`).join('')}` : ''}
+          ${ins.possible_subscriptions.length ? `<p class="small muted" style="margin-bottom:4px">Repeating charges not in your bills list</p>${ins.possible_subscriptions.map((s) => `<div class="small">${esc(s.name)}: about ${aud(s.typical_amount_cents)}, seen in ${s.months_seen} months</div>`).join('')}` : ''}
+          ${ins.over_budget.length ? `<p class="small" style="color:var(--bad)">Over budget: ${ins.over_budget.map((b) => esc(b.category)).join(', ')}</p>` : ''}
+          ${!ins.discretionary_by_category.length && !ins.possible_subscriptions.length ? '<div class="empty">Not enough transactions yet.</div>' : ''}
+          <a class="btn small ghost" href="#/chat" data-prompt="Look at my spending for the last 30 days and suggest where I can cut back">Ask AI for suggestions</a></div>
+      </div>`;
+    el.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => { state.reportPeriod = b.dataset.p; reload(); });
+    el.querySelectorAll('[data-prompt]').forEach((a) => a.addEventListener('click', () => { state.pendingPrompt = a.dataset.prompt; state.convId = null; }));
+  }
+};
+
+VIEWS.goals = async (view) => {
+  const goals = await api('/api/goals');
+  const sixMonths = (() => { const d = new Date(`${todayIso()}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + 6); return d.toISOString().slice(0, 10); })();
+  view.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <form id="goalForm" class="form-grid">
+        <label class="wide">Goal<input name="name" placeholder="e.g. Save $10,000" required maxlength="120"></label>
+        <label>Type<select name="kind"><option value="savings">Savings</option><option value="emergency_fund">Emergency fund</option><option value="house_deposit">House deposit</option><option value="business">Business investment</option><option value="debt_payoff">Debt payoff</option><option value="other">Other</option></select></label>
+        <label>Target ($)<input name="target" inputmode="decimal" placeholder="10000" required></label>
+        <label>By<input name="date" type="date" value="${sixMonths}"></label>
+        <label>Already saved ($)<input name="start" inputmode="decimal" placeholder="0"></label>
+        <button class="btn">Create goal</button>
+      </form>
+    </div>
+    <div class="grid" id="goalList">${goals.map((g) => `
+      <div class="card goal" data-id="${g.id}">
+        <div class="row"><h3 style="margin:0">${esc(g.name)}</h3>${goalPill(g.plan.status)}${g.status !== 'active' && g.status !== 'achieved' ? `<span class="pill">${esc(g.status)}</span>` : ''}<span class="spacer"></span>
+          <span class="small muted">${g.target_date ? `by ${auDate(g.target_date, { day: 'numeric', month: 'short', year: 'numeric' })}` : 'no deadline'}</span></div>
+        <div class="row" style="margin:12px 0 6px;align-items:baseline"><span class="stat" style="font-size:26px">${aud(g.plan.saved_cents, { whole: true })}</span><span class="muted">of ${aud(g.target_cents, { whole: true })} · ${g.plan.percent}%</span></div>
+        <div class="hbar-track big"><i style="width:${g.plan.percent}%"></i>${[25, 50, 75].map((m) => `<b class="hbar-mark" style="left:${m}%" title="${m}%"></b>`).join('')}</div>
+        <div class="grid cols-3" style="margin-top:12px">
+          <div><div class="stat-sub">Needed per week</div><b>${g.plan.required_weekly_cents === null ? '–' : aud(g.plan.required_weekly_cents)}</b></div>
+          <div><div class="stat-sub">Needed per month</div><b>${g.plan.required_monthly_cents === null ? '–' : aud(g.plan.required_monthly_cents)}</b></div>
+          <div><div class="stat-sub">${g.plan.status === 'behind' ? 'Behind by' : 'Left to save'}</div><b style="${g.plan.status === 'behind' ? 'color:var(--bad)' : ''}">${aud(g.plan.status === 'behind' ? g.plan.behind_by_cents : g.plan.remaining_cents)}</b></div>
+        </div>
+        <div style="margin-top:12px">${lineChart(g.progress, { from: g.start_date, to: g.target_date, target: g.target_cents })}</div>
+        <div class="advice small" data-advice></div>
+        <form class="row contrib" style="margin-top:12px">
+          <input name="amount" inputmode="decimal" placeholder="Amount ($)" style="width:130px" required>
+          <button class="btn small">Add savings</button><button class="btn small ghost" type="button" data-withdraw>Withdraw</button>
+          <span class="spacer"></span>
+          <button class="btn small ghost" type="button" data-check>Is this realistic?</button>
+          <button class="btn small danger" type="button" data-del>Delete</button>
+        </form>
+      </div>`).join('') || '<div class="card empty">No goals yet. Create one above, or tell the AI something like "I want to save $10,000 in six months".</div>'}
+    </div>`;
+  $('#goalForm').onsubmit = async (e) => {
+    e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); const t = toCents(f.target);
+    if (!(t > 0)) return toast('Enter a target amount');
+    const start = f.start ? toCents(f.start) : 0;
+    try { await api('/api/goals', { method: 'POST', body: { name: f.name, kind: f.kind, target_cents: t, target_date: f.date || null, starting_amount_cents: start > 0 ? start : undefined } }); toast('Goal created.'); route(); } catch (err) { toast(err.message); }
+  };
+  const list = $('#goalList');
+  const contribute = async (card, sign) => {
+    const c = toCents(card.querySelector('[name=amount]').value);
+    if (!(c > 0)) return toast('Enter an amount');
+    try {
+      const r = await api(`/api/goals/${card.dataset.id}/contributions`, { method: 'POST', body: { amount_cents: sign * c } });
+      toast(r.milestones_reached.length ? `🎉 You reached ${r.milestones_reached.at(-1)}% of your goal!` : 'Recorded.'); route();
+    } catch (err) { toast(err.message); }
+  };
+  list.addEventListener('submit', (e) => { e.preventDefault(); contribute(e.target.closest('.goal'), 1); });
+  list.onclick = async (e) => {
+    const card = e.target.closest('.goal'); if (!card) return;
+    if (e.target.matches('[data-withdraw]')) contribute(card, -1);
+    if (e.target.matches('[data-del]') && confirm('Delete this goal and its history?')) { await api(`/api/goals/${card.dataset.id}`, { method: 'DELETE' }); route(); }
+    if (e.target.matches('[data-check]')) {
+      const a = await api(`/api/goals/${card.dataset.id}/advice`);
+      const label = { comfortable: ['Comfortable', 'var(--good)'], tight: ['Tight but possible', 'var(--warn)'], not_realistic: ['Needs changes to be realistic', 'var(--bad)'], achieved: ['Achieved', 'var(--good)'], unknown: ['Not enough data', 'var(--muted)'] }[a.feasibility];
+      card.querySelector('[data-advice]').innerHTML = `<div class="advice-box">
+        <b style="color:${label[1]}">${label[0]}</b>
+        ${a.savings_capacity_monthly_cents !== null ? `<div>You can save about <b>${aud(a.savings_capacity_monthly_cents, { whole: true })}</b> a month (${esc(a.capacity_basis)}). After your other goals, <b>${aud(a.available_for_this_goal_monthly_cents, { whole: true })}</b> is left for this one; it needs <b>${a.plan.required_monthly_cents !== null ? aud(a.plan.required_monthly_cents, { whole: true }) : '–'}</b>.</div>` : ''}
+        ${a.monthly_gap_cents ? `<div>Short by about ${aud(a.monthly_gap_cents, { whole: true })} a month.</div>` : ''}
+        ${a.realistic_target_date && a.feasibility !== 'comfortable' ? `<div>At your current rate you'd reach it around <b>${auDate(a.realistic_target_date, { day: 'numeric', month: 'short', year: 'numeric' })}</b>.</div>` : ''}
+        ${a.possible_cutbacks.length ? `<div>Cutting back 25% on ${a.possible_cutbacks.map((c) => `${esc(c.category)} (avg ${aud(c.monthly_average_cents, { whole: true })}/mo, save ${aud(c.suggested_cut_cents, { whole: true })})`).join(', ')} would help.</div>` : ''}
+        ${a.suggestions.map((s) => `<div>${esc(s)}</div>`).join('')}</div>`;
+    }
+  };
 };
 
 const COMING = {

@@ -9,12 +9,15 @@ import { Agent, AgentNotConfiguredError, toDisplay } from './services/ai/agent.j
 import { decidePending, listPending } from './services/ai/executor.js';
 import { getPermissions, setMode } from './services/ai/permissions.js';
 import type { ToolContext } from './services/ai/tools.js';
+import type { FinanceService } from './services/finance/finance.js';
+import { GoalError, type GoalService } from './services/goals/goals.js';
+import { registerFinanceRoutes } from './services/finance/routes.js';
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 
-export function registerRoutes(app: FastifyInstance, db: Db, deps: { tasks: TaskService; memory: MemoryService; agent: Agent; model: string }) {
-  const { tasks, memory, agent } = deps;
-  const ctx = (userId: number): ToolContext => ({ userId, tasks, memory });
+export function registerRoutes(app: FastifyInstance, db: Db, deps: { tasks: TaskService; memory: MemoryService; finance: FinanceService; goals: GoalService; agent: Agent; model: string }) {
+  const { tasks, memory, finance, goals, agent } = deps;
+  const ctx = (userId: number): ToolContext => ({ userId, tasks, memory, finance, goals });
 
   app.register(async (api) => {
     api.addHook('preHandler', requireUser);
@@ -22,6 +25,7 @@ export function registerRoutes(app: FastifyInstance, db: Db, deps: { tasks: Task
     // Turn validation errors into friendly 400 responses.
     api.setErrorHandler((err, _req, reply) => {
       if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') });
+      if (err instanceof GoalError) return reply.code(400).send({ error: err.message });
       if (err instanceof SensitiveDataError) return reply.code(400).send({ error: err.message });
       if (err instanceof AgentNotConfiguredError) return reply.code(503).send({ error: err.message });
       const status = (err as { statusCode?: number }).statusCode;
@@ -39,7 +43,14 @@ export function registerRoutes(app: FastifyInstance, db: Db, deps: { tasks: Task
     api.get('/api/home', async (req) => {
       const overview = await tasks.overview(req.userId!);
       const pending = (await listPending(db, req.userId!)).filter((p) => p.status === 'pending');
-      return { overview, pending_approvals: pending, week: await tasks.weeklyReport(req.userId!) };
+      const goalList = (await goals.list(req.userId!)).filter((g) => g.status === 'active' || g.status === 'achieved')
+        .map(({ contributions, progress, ...g }) => g);
+      return {
+        overview, pending_approvals: pending, week: await tasks.weeklyReport(req.userId!),
+        safe_to_spend: await finance.safeToSpend(req.userId!, await goals.weeklyTargets(req.userId!)),
+        upcoming_bills: await finance.upcomingBills(req.userId!, 7),
+        goals: goalList,
+      };
     });
 
     // ---- Tasks ----
@@ -74,6 +85,8 @@ export function registerRoutes(app: FastifyInstance, db: Db, deps: { tasks: Task
       await audit(db, req.userId!, 'user', 'task.deleted', { id });
       return { ok: true };
     });
+
+    registerFinanceRoutes(api, db, finance, goals);
 
     // ---- Memory ----
     api.get('/api/memory', async (req) => memory.list(req.userId!));

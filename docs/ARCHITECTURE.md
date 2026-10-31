@@ -13,8 +13,8 @@ A **modular monolith**: one Node.js + TypeScript server, split into separate ser
 | Memory | `src/services/memory` | 1 ✅ | What the agent remembers about you; inspect, edit, export, delete; refuses sensitive data |
 | AI | `src/services/ai` | 1 ✅ | Claude agent loop, tool registry, permission checks, approval queue |
 | Audit | `src/services/audit` | 1 ✅ | Records logins, tool calls, approvals and setting changes |
-| Finance | `src/services/finance` | 2 | Transactions, CSV import, categories, budgets, bills, debts, reports |
-| Goals | `src/services/goals` | 2 | Savings goals, weekly and monthly targets, progress, milestones |
+| Finance | `src/services/finance` | 2 ✅ | Transactions, CSV import, categories, budgets, bills, debts, reports |
+| Goals | `src/services/goals` | 2 ✅ | Savings goals, weekly and monthly targets, progress, milestones |
 | Social | `src/services/social` | 3 | Content plans, captions, scripts, drafts, approval workflow, calendar |
 | Automation | `src/services/automation` | 4 | Scheduled 7 am / 1 pm / 8 pm routines and reminders (pg-boss job queue in Postgres) |
 | Integrations | `src/services/integrations` | 5 | Google Calendar, Meta/YouTube/TikTok publishing, open banking via OAuth |
@@ -125,7 +125,7 @@ personal-agent/
 │       ├── memory/         memory.ts
 │       └── audit/          audit.ts
 │       (finance/, goals/, social/, automation/, integrations/ arrive in Phases 2–5)
-├── tests/                  34 automated tests
+├── tests/                  58 automated tests
 └── docs/ARCHITECTURE.md    This document
 ```
 
@@ -143,7 +143,7 @@ personal-agent/
 
 ## 7. Next phases
 
-- **Phase 2 Finance:** transactions table (amounts stored as integer cents), CSV import with bank-format presets (CommBank, NAB, ANZ, Westpac, ING), rule + AI categorisation, budgets, bills and subscriptions, debts, savings goals with weekly/monthly targets and charts, "safe to spend this week" calculation, finance tools for the agent (read-only by default).
+- **Phase 2 Finance (done ✅):** transactions table (amounts stored as integer cents), CSV import with bank-format presets (CommBank, NAB, ANZ, Westpac, ING), rule + AI categorisation, budgets, bills and subscriptions, debts, savings goals with weekly/monthly targets and charts, "safe to spend this week" calculation, finance tools for the agent (read-only by default).
 - **Phase 3 Social Studio:** accounts and content categories, weekly plans, ideas, captions, hashtags, scripts, creative briefs, drafts with preview, approve/request-changes workflow, content calendar. Publishing tools are fixed to "Ask me" and cannot be switched to Allow.
 - **Phase 4 Automation:** pg-boss scheduler, 7:00 / 13:00 / 20:00 Melbourne briefings saved to Home, reminder notifications (web push or email), job history, retries.
 - **Phase 5 Integrations:** Google Calendar (OAuth), Meta Graph API for Instagram/Facebook, YouTube Data API for Shorts, TikTok Content Posting API (needs TikTok app audit before public posting), optional open banking via an accredited CDR provider. Tokens stored encrypted.

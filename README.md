@@ -2,7 +2,15 @@
 
 Your private assistant for tasks, money, goals and social media. Australian dollars, Australian dates, Australia/Melbourne time.
 
-**Phase 1 (this version) works today:** secure login, dashboard, AI chat with real tool calling, task management with recurring tasks and habits, memory, per-tool permissions, approvals and an audit log. Finance, Goals, Social Studio and Automations are visible in the menu but marked as later phases; they show no fake data.
+**Working today (Phases 1 and 2):**
+
+- Secure login, dashboard, AI chat with real tool calling, per-tool permissions, approvals and an audit log
+- Tasks with priorities, recurring tasks and habits, missed tasks and weekly productivity reports
+- Memory you can inspect, edit, export and delete
+- **Finance:** manual entry and bank CSV import (no bank login needed), automatic categories that learn from your corrections, weekly and monthly budgets, bills and subscriptions with reminders, debts with payoff estimates, savings capacity, "safe to spend this week", spending insights, and weekly and monthly reports
+- **Goals:** savings goals with weekly and monthly targets, on-track or behind status, realistic-date checks against your real data, suggested cutbacks, progress charts and 25/50/75/100% milestones
+
+Social Studio (Phase 3) and Automations (Phase 4) are visible in the menu but marked as later phases; they show no fake data.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture, diagram, stack, costs and roadmap.
 
@@ -42,7 +50,7 @@ docker compose up -d
 # 5. Create the database tables
 npm run migrate
 
-# 6. Run the automated tests (should say "pass 34, fail 0")
+# 6. Run the automated tests (should say "pass 58, fail 0")
 npm test
 
 # 7. Start the app
@@ -62,6 +70,30 @@ To open it on your phone while on the same Wi-Fi, use `http://<your-computer's-I
 - "Add a daily habit: 20 minute walk at 7am"
 - "Remember that I do my best focused work before 11am"
 - "Delete the groceries task" (this shows an approval card, because deleting is set to "Ask me")
+- "How much money can I safely spend this week?"
+- "I spent $42.50 at Coles today"
+- "I want to save $10,000 in six months. Is that realistic?"
+- "Set my eating out budget to $60 a week" (budgets always ask for your approval)
+- "Add my electricity bill: $390 every quarter, next due 3 November"
+- "Where can I cut back on spending?"
+- "Give me my monthly financial report"
+
+### Importing your bank transactions
+
+1. In your bank's app or internet banking, export transactions as **CSV** (CommBank, NAB, ANZ, Westpac, ING, Up, Macquarie all support this).
+2. In the dashboard go to **Finance → Import CSV** and pick the file.
+3. Check the columns it guessed (date, description, amount, or debit/credit), then press Import.
+4. Re-importing the same file is safe: rows already imported are skipped.
+
+### How the money numbers are worked out
+
+- **Safe to spend this week** = weekly take-home pay − bills (spread evenly, so a $390 quarterly bill sets aside $30 every week) − debt repayments − what your savings goals need per week − flexible spending already this week (rent, bills, subscriptions, debt and transfers are not counted twice).
+- **Weekly income** comes from your real transactions once you have 4+ weeks of them; until then it uses the take-home pay you enter in Finance → Overview.
+- **Savings capacity** = average monthly income − average monthly spending over the last 90 days.
+- **Goal targets** = amount left ÷ weeks (or months) left. "Behind" means you've saved less than a straight line from the start date to the target date says you should have by now.
+- If there isn't enough data, the app and the AI say so instead of guessing.
+
+Wrong category? Change it in **Finance → Transactions** and choose "always" so similar transactions get it automatically next time.
 
 ### Everyday commands
 
@@ -102,7 +134,9 @@ Set `AI_MODEL` in `.env`, then restart:
 - Risky tools (delete task, delete memory) wait for your approval. You can change any tool to Allow, Ask me or Block in Settings.
 - Stored content (task titles, notes, memory) is treated as data, not instructions, to resist prompt injection.
 - Memory refuses card numbers, passwords, bank account details and tax file numbers.
-- The agent has no tools to move money, make payments, send messages or publish posts.
+- The agent has no tools to move money, make payments, send messages or publish posts. "Mark bill paid" and "add savings" only update your records.
+- Budgets the AI proposes always wait for your approval. Deleting transactions also asks first.
+- Bank data comes only from CSV files you export yourself. Your bank login is never requested or stored.
 - `ENCRYPTION_KEY` encrypts OAuth tokens (AES-256-GCM) for the integrations coming in Phase 5.
 
 **Keep `.env` private.** It's in `.gitignore` so it won't be uploaded to GitHub.
@@ -131,6 +165,8 @@ src/auth/                login, sessions, CSRF, rate limiting
 src/services/ai/         agent loop, tools, permissions, approvals
 src/services/tasks/      tasks, recurrence, overview, weekly report
 src/services/memory/     agent memory
+src/services/finance/    transactions, CSV import, categories, budgets, bills, debts, reports
+src/services/goals/      savings goals, targets, advice, milestones
 src/services/audit/      audit log
 migrations/              database schema
 public/                  dashboard (HTML, CSS, JS)

@@ -7,9 +7,11 @@ import { setMode } from '../src/services/ai/permissions.js';
 import { toApiTools } from '../src/services/ai/tools.js';
 import { TaskService } from '../src/services/tasks/tasks.js';
 import { MemoryService } from '../src/services/memory/memory.js';
+import { FinanceService } from '../src/services/finance/finance.js';
+import { GoalService } from '../src/services/goals/goals.js';
 import { freshDb, makeUser } from './helpers.js';
 
-let db: Db; let uid: number; let ctx: { userId: number; tasks: TaskService; memory: MemoryService };
+let db: Db; let uid: number; let ctx: { userId: number; tasks: TaskService; memory: MemoryService; finance: FinanceService; goals: GoalService };
 
 /** A scripted stand-in for Claude: returns the given responses in order and records each request. */
 function fakeClaude(script: ((req: any) => any)[]) {
@@ -26,9 +28,10 @@ const toolUse = (id: string, name: string, input: unknown) => ({ stop_reason: 't
 const say = (text: string) => ({ stop_reason: 'end_turn', content: [{ type: 'text', text }] });
 const lastToolResult = (req: any) => req.messages.at(-1).content[0];
 
-before(async () => { db = await freshDb(); uid = await makeUser(db); ctx = { userId: uid, tasks: new TaskService(db, 'Australia/Melbourne'), memory: new MemoryService(db) }; });
+before(async () => { db = await freshDb(); uid = await makeUser(db); const finance = new FinanceService(db, 'Australia/Melbourne');
+  ctx = { userId: uid, tasks: new TaskService(db, 'Australia/Melbourne'), memory: new MemoryService(db), finance, goals: new GoalService(db, finance, 'Australia/Melbourne') }; });
 after(async () => { await db.end(); });
-beforeEach(async () => { await db.query('DELETE FROM tool_permissions; DELETE FROM tasks; DELETE FROM pending_actions;'); });
+beforeEach(async () => { await db.query('DELETE FROM tool_permissions; DELETE FROM tasks; DELETE FROM pending_actions; DELETE FROM transactions; DELETE FROM budgets; DELETE FROM goals; DELETE FROM finance_settings;'); });
 
 const NOW = new Date('2026-10-31T03:00:00Z'); // Sat 31 Oct 2026, 2 pm in Melbourne
 
@@ -153,4 +156,50 @@ test('cheaper models without server fallback do not send the fallbacks field', a
   const fake = fakeClaude([(req) => { assert.equal(req.fallbacks, undefined); assert.equal(req.betas, undefined); return say('hi'); }]);
   const agent = new Agent(db, fake.create, { model: 'claude-haiku-5-5', effort: 'low', timezone: 'Australia/Melbourne' });
   await agent.chat(ctx, 'hi', undefined, NOW);
+});
+
+test('"How much can I safely spend this week?" uses the safe_to_spend tool with real numbers', async () => {
+  await ctx.finance.setIncome(uid, { income_cents: 140000, income_frequency: 'weekly' });
+  const fake = fakeClaude([
+    () => toolUse('tu_s', 'safe_to_spend', {}),
+    (req) => {
+      const r = JSON.parse(lastToolResult(req).content);
+      assert.equal(r.weekly_income_cents, 140000);
+      assert.equal(r.income_source, 'stated income');
+      return say(`You can safely spend about $${r.safe_to_spend_cents / 100} this week.`);
+    },
+  ]);
+  const agent = new Agent(db, fake.create, { model: 'claude-opus-5-5', effort: 'low', timezone: 'Australia/Melbourne' });
+  const r = await agent.chat(ctx, 'How much money can I safely spend this week?', undefined, NOW);
+  assert.match(r.reply, /\$1400/);
+});
+
+test('set_budget waits for approval, then saves the budget', async () => {
+  const fake = fakeClaude([
+    () => toolUse('tu_bud', 'set_budget', { category: 'Eating out', period: 'weekly', amount_cents: 8000 }),
+    (req) => { assert.match(lastToolResult(req).content, /Approval required/); return say('Approve the budget card to save it.'); },
+  ]);
+  const agent = new Agent(db, fake.create, { model: 'claude-opus-5-5', effort: 'low', timezone: 'Australia/Melbourne' });
+  const r = await agent.chat(ctx, 'Set my eating out budget to $80 a week', undefined, NOW);
+  assert.equal((await ctx.finance.budgetStatus(uid)).length, 0);
+  await decidePending(db, ctx, r.actions[0].pendingActionId!, true);
+  const b = await ctx.finance.budgetStatus(uid);
+  assert.equal(b.length, 1);
+  assert.equal(b[0].amount_cents, 8000);
+});
+
+test('agent creates "Save $10,000 in six months" and checks it against real data', async () => {
+  const fake = fakeClaude([
+    () => toolUse('tu_g', 'create_goal', { name: 'Save $10k', target_cents: 1000000, target_date: '2027-04-30' }),
+    (req) => { const g = JSON.parse(lastToolResult(req).content); return toolUse('tu_a', 'goal_advice', { id: g.id }); },
+    (req) => {
+      const a = JSON.parse(lastToolResult(req).content);
+      assert.equal(a.feasibility, 'unknown'); // no income or transactions yet: it must not invent numbers
+      assert.ok(a.suggestions[0].includes('take-home pay'));
+      return say('Goal created. Add your pay so I can check it.');
+    },
+  ]);
+  const agent = new Agent(db, fake.create, { model: 'claude-opus-5-5', effort: 'low', timezone: 'Australia/Melbourne' });
+  await agent.chat(ctx, 'I want to save $10,000 in six months', undefined, NOW);
+  assert.equal((await ctx.goals.list(uid)).length, 1);
 });
